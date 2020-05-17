@@ -2847,8 +2847,8 @@ def split_into_phrases(txt, wanted_phrase_len, ending_chars='\n\r', excludes=' �
 def find_chars_in_dict(phrase, d, excludes=' ，。[]\n\r'):
     '''returns a tuple of boolean and set
 
-    * the boolean indicates if all chars are found in d
-    * the set contains all found chars, regardless all is found or not
+    * the boolean indicates if all chars in phrase are found in d
+    * the set contains found chars, regardless all is found or not
 
     examples:
 
@@ -2872,14 +2872,12 @@ def find_chars_in_dict(phrase, d, excludes=' ，。[]\n\r'):
 
 
 def match_n(txt, n, d):
+    '''finds n contiguous chars in txt where all chars can be found in d'''
     match_dict = {}
     for phrase, line in split_into_phrases(txt, n, ending_chars='\n\r', excludes=' ，。[]\n\r'):
         ok, found = find_chars_in_dict(phrase, d)
-        # print(ok, found, phrase)
         if ok:
-            # match_dict[phrase] = match_dict.get(phrase, []) + [found]
             match_dict[phrase] = match_dict.get(phrase, set()) | set([line])
-            # print(match_dict)
     return match_dict
 
 
