@@ -60,6 +60,7 @@ def find_contiguous(txt, d, excludes=' ，。[]\n\r'):
 
 
 def match_n_or_more(txt, n, d, nonmatch_color='\033[0;37m', match_color='\033[0;32m'):
+    '''returns a colored string if at least n contiguous chars can be found in d'''
     k = 0 # start position of non-matching string
     output = ''
     for matching_count, window in find_contiguous(txt, d):
