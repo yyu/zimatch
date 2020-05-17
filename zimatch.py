@@ -24,109 +24,53 @@ def build_dict(txt, excludes=' ，。[]\n\r'):
     return d
 
 
-def split_into_phrases(txt, wanted_phrase_len, ending_chars='\n\r', excludes=' 　，。[]\n\r'):
-    '''yields phrases of wanted length as well as the line that contains it
+def find_contiguous(txt, d, excludes=' ，。[]\n\r'):
+    '''find strings that contain chars in d or excludes and
+    yield (matching_count, window)
+
+    * matching_count is how many chars are matched using d
+    * window is a list [i, j] that indicates the start and end of the matching string
 
     example:
-        for phrase, line in split_into_phrases('關關雎鳩，在河之洲。\n窈窕淑女，君子好逑。\n', 5):
-            print(phrase, '<', line)
 
-        =>  關關雎鳩，在 < 關關雎鳩，在河之洲。
-            關雎鳩，在河 < 關關雎鳩，在河之洲。
-            雎鳩，在河之 < 關關雎鳩，在河之洲。
-            鳩，在河之洲 < 關關雎鳩，在河之洲。
-            窈窕淑女，君 < 窈窕淑女，君子好逑。
-            窕淑女，君子 < 窈窕淑女，君子好逑。
-            淑女，君子好 < 窈窕淑女，君子好逑。
-            女，君子好逑 < 窈窕淑女，君子好逑。
+        find_contiguous('知魚之樂。', zi_dict)
+        => 3, [1, 4]
+        meaning the window is '知魚之樂。'[1:4] which is '魚之樂' which contains 3 matching chars
+
+        find_contiguous('知魚之樂。魚之樂。', zi_dict)
+        => 6, [1, 8]
+        meaning the window is '知魚之樂。魚之樂。'[1:8] which is '魚之樂。魚之樂' which contains 6 matching chars (and 1 excluded char)
     '''
-    assert(set(ending_chars) < set(excludes))
-
     txt_len = len(txt)
-    ending_char_set = set(ending_chars)
-    excludes_set = set(excludes)
-    last_ending_char_pos = -1
-
-    for i in range(txt_len):
-        if txt[i] in ending_char_set:
-            last_ending_char_pos = i
-            continue
-
-        if txt[i] in excludes_set:
-            continue
-
-        j = i
-        phrase_len = 0
-
-        while j < txt_len and phrase_len < wanted_phrase_len:
-            if txt[j] in ending_char_set:
-                break
-            if txt[j] not in excludes_set:
-                phrase_len += 1
-            j += 1
-
-        if phrase_len == wanted_phrase_len:
-            phrase = txt[i:j]
-            while j < txt_len and txt[j] not in ending_char_set:
-                j += 1
-            line = txt[(last_ending_char_pos + 1):j]
-            yield phrase, line
-
-
-def find_chars_in_dict(phrase, d, excludes=' ，。[]\n\r'):
-    '''returns a tuple of boolean and set
-
-    * the boolean indicates if all chars in phrase are found in d
-    * the set contains found chars, regardless all is found or not
-
-    examples:
-
-        find_chars_in_dict('右之右之，君子有之。', zi_dict)
-        => (True, {'右', '之', '有', '子', '君'})
-
-        print(find_chars_in_dict('維其有之，是以似之。', zi_dict))
-        => (False, {'維', '以', '其', '有', '之', '是'})
-    '''
-    excludes_set = set(excludes)
-    found = set()
-    ok = True
-    for ch in phrase:
-        if ch in excludes_set:
-            continue
+    matching_count, window = 0, []
+    for i in range(txt_len + 1):
+        ch = txt[i] if i < txt_len else 'sentinel' # a sentinel will make sure the last window is always yielded
         if ch in d:
-            found.add(ch)
+            matching_count += 1
+            if not window:
+                window = [i, i + 1]
+            else:
+                window[1] = i + 1
+        elif ch in excludes:
+            continue
         else:
-            ok = False
-    return ok, found
+            if window:
+                yield matching_count, window
+                matching_count, window = 0, []
 
 
-def match_n(txt, n, d):
-    '''finds n contiguous chars in txt where all chars can be found in d'''
-    match_dict = {}
-    for phrase, line in split_into_phrases(txt, n, ending_chars='\n\r', excludes=' ，。[]\n\r'):
-        ok, found = find_chars_in_dict(phrase, d)
-        if ok:
-            match_dict[phrase] = match_dict.get(phrase, set()) | set([line])
-    return match_dict
-
-
-def print_matches(match_dict):
-    '''print matches returned from match_n()'''
-    for phrase, lines in match_dict.items():
-        for line in lines:
-            i = line.find(phrase)
-            assert(i >= 0)  # must have found it
-            end_of_phrase = i + len(phrase)
-            print('\033[37m%s\033[0;32m%s\033[0;37m%s\033[0m' % (line[:i], line[i:end_of_phrase], line[end_of_phrase:]))
-
-
-def is_debugging():
-    return len(sys.argv) == 2 and sys.argv[1] == '--debug'
-
-
-def print_dict(d):
-    for k, v in d.items():
-        print(k, ':', v)
+def match_n_or_more(txt, n, d, nonmatch_color='\033[0;37m', match_color='\033[0;32m'):
+    k = 0 # start position of non-matching string
+    output = ''
+    for matching_count, window in find_contiguous(txt, d):
+        if matching_count < n:
+            continue
+        i, j = window
+        output += '%s%s%s%s\033[0m' % (nonmatch_color, txt[k:i], match_color, txt[i:j])
+        k = j # j is the end of the matching string, thus the start of non-matching string
+    if output:
+        output += '%s%s\033[0m' % (nonmatch_color, txt[k:])
+    return output
 
 
 def print_usage():
@@ -137,7 +81,7 @@ def print_usage():
 
 
 if __name__ == '__main__':
-    if len(sys.argv) != 4:
+    if len(sys.argv) < 4:
         print_usage()
         exit(1)
 
@@ -148,6 +92,28 @@ if __name__ == '__main__':
         print_usage()
         exit(2)
 
+    text_for_dict_building = file_for_dict_building.read_text()
+
+    zi_dict = build_dict(text_for_dict_building)
+
+    if '--debug' in sys.argv:
+        for k, v in zi_dict.items():
+            print(k, ':', v)
+
+        for k, window in find_contiguous('知魚之樂。', zi_dict):
+            assert(k == 3 and window == [1, 4])
+
+        for k, window in find_contiguous('知魚之樂。魚之樂。', zi_dict):
+            assert(k == 6 and window == [1, 8])
+
+        print('-' * 80)
+
+        print(match_n_or_more('維其有之，', 3, zi_dict))
+        print(match_n_or_more('是以似之。', 1, zi_dict))
+        print(match_n_or_more('知魚之樂。', 2, zi_dict))
+
+        exit(0)
+
     filename_to_search = sys.argv[2]
     file_to_search = Path(filename_to_search)
     if not file_to_search.is_file():
@@ -155,26 +121,12 @@ if __name__ == '__main__':
         print_usage()
         exit(2)
 
-    text_for_dict_building = file_for_dict_building.read_text()
     text_to_search = file_to_search.read_text()
 
     n = int(sys.argv[3])
 
-    zi_dict = build_dict(text_for_dict_building)
-
-    if is_debugging():
-        print_dict(zi_dict)
-
-        print('-' * 80)
-
-        for phrase, line in split_into_phrases('關關雎鳩，在河之洲。\n窈窕淑女，君子好逑。\n', 5):
-            print(phrase, '<', line)
-
-        print('-' * 80)
-
-        print(find_chars_in_dict('維其有之，', zi_dict))
-        print(find_chars_in_dict('是以似之。', zi_dict))
-
-        exit(0)
-
-    print_matches(match_n(text_to_search, n, zi_dict))
+    for line in text_to_search.splitlines():
+        m = match_n_or_more(line, n, zi_dict)
+        if not m:
+            continue # skip the line if no match at all
+        print(m)
